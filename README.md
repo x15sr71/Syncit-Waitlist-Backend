@@ -3,6 +3,8 @@
 
 Syncit Waitlist Backend is an Express-based backend service designed to manage user email addresses for the Syncit application waitlist. This backend ensures that users who sign up for early access receive notifications when the Syncit application launches.
 
+SyncIt waitlist is live! 🚀🎵 Join now: [https://syncit.org.in/](https://syncit.org.in/) 🔥
+
 
 ## Features
 
