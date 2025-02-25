@@ -1,46 +1,63 @@
-import "dotenv/config";
-import express, { Request, Response, Application } from "express";
-import mongoose from "mongoose";
+import dotenv from "dotenv";
+dotenv.config();
+
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import { z } from "zod";
+import fs from "fs";
+import https from "https";
+import zod from "zod";  
 
-const app: Application = express();
-app.use(express.json());
-app.use(cors());
+const app = express();
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI!)
-  .then(() => console.log("Connected to MongoDB"))
-  .catch((err) => console.error("Failed to connect to MongoDB", err));
+// Use the cors middleware with environment variable or default settings
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "*", // For production, set this to "https://syncit.org.in"
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })
+);
 
-// Define Mongoose schema and model
-const EmailSchema = new mongoose.Schema({ email: String });
-const Email = mongoose.model("Email", EmailSchema);
+const emailSchema = zod.string().email();
 
-// Zod schema for email validation
-const emailSchema = z.string().email();
+// Manual middleware to ensure CORS headers are in all responses
+app.use((req: Request, res: Response, next: NextFunction): void => {
+  res.header("Access-Control-Allow-Origin", process.env.CORS_ORIGIN || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
 
-// POST route handler (fixed return type)
-app.post("/api/waitlist", async (req: Request, res: Response) => {
-  const { email } = req.body;
-  const validation = emailSchema.safeParse(email);
-
-  if (!validation.success) {
-    console.log("Invalid email");
-    res.status(400).json({ message: "Invalid email" });
-    return; // Explicit return after sending response
+  if (req.method === "OPTIONS") {
+    res.sendStatus(204);
+    return;
   }
 
-  try {
-    const response = await Email.create({ email });
-    console.log(response);
-    res.json({ message: "You've been added to the waitlist!" });
-  } catch (err) {
-    console.error("MongoDB error:", err);
-    res.json({ message: "You're on the waitlist (queued)!" });
-  }
+  next();
 });
 
-// Start the server
-const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`Server running on port ${port}`));
+// Middleware to parse JSON request bodies
+app.use(express.json());
+
+// Sample API endpoint
+app.post("/api/waitlist", (req: Request, res: Response) => {
+  const email = emailSchema.parse(req.body.email);
+  console.log(`Received waitlist request for email: ${email}`);
+  res.json({ message: "Waitlist request received" });
+});
+
+// Read SSL certificate and key from two directories up or from env variables
+const sslOptions = {
+  key: fs.readFileSync(process.env.SSL_KEY_PATH || "../../origin-key.pem"),
+  cert: fs.readFileSync(process.env.SSL_CERT_PATH || "../../origin-cert.pem"),
+};
+
+const PORT = process.env.PORT || 4000;
+
+// Create an HTTPS server with the SSL options and our Express app
+https.createServer(sslOptions, app).listen(PORT, () => {
+  console.log(`HTTPS server running on port ${PORT}`);
+});
